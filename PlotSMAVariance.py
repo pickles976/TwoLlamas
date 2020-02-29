@@ -26,13 +26,20 @@ api = tradeapi.REST(
     secret_key=api_secret
 )
 
-#get the energy of a signal
-def getSignalEnergy(signal):
-    e = 0;
-    for xn in signal:
-        e += xn ** 2
-    e /= len(signal)
-    return e
+#find the zeros of a signal
+def findZeros(signal):
+    zeros = []
+    zeros.append(0)
+    for n in signal:
+        index = np.where(signal == n)[0][0]
+        #make sure that we can look ahead and behind
+        if index > 0 and index < len(signal) - 1:
+            #check if we have gone from negative to positive
+            if (signal[index - 1] < 0 and signal[index + 1] > 0) or (signal[index - 1] > 0 and signal[index + 1] < 0):
+                if abs(zeros[len(zeros) - 1] - index) > 20:
+                    zeros.append(index) #add the index of n to our list of zeros
+
+    return zeros
 
 
 #calculate simple moving average
@@ -60,10 +67,10 @@ session = requests.session()
 #actual stuff here
 #================================================#
 
-symbol = 'NVDA'
+symbol = 'CHK'
 
 #retrieve price data
-bars = api.get_barset(symbol, '5Min', limit=672)
+bars = api.get_barset(symbol, '5Min', limit=1000)
 aapl_bars = bars[symbol]
 
 o = [] #open price data
@@ -96,12 +103,15 @@ highcut = 0.00001735 * (1 + corner)
 filtered = butter_bandpass_filter(flattened, lowcut, highcut, fs, order=3)
 
 variance = np.var(flattened) #calculate variance
+
 print(f"Variance is: {variance}")
-print(f"Energy is: {getSignalEnergy(filtered)}")
+print(f"Zeros are: {findZeros(filtered)}")
+
 
 fig, ax = mpl.subplots()
 mpl.plot(flattened)
 mpl.plot(filtered)
+#mpl.plot(filtered_variance)
 #mpl.plot(x,o)
 #mpl.plot(x, trend, '-')
 # mpl.plot(sma)
