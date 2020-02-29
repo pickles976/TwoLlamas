@@ -1,7 +1,10 @@
+import sys
+
 import alpaca_trade_api as tradeapi
 import requests
 import matplotlib.pyplot as mpl
 from scipy.signal import butter, lfilter
+import math
 import mpl_finance as plt
 import time
 from ta import trend
@@ -22,6 +25,28 @@ api = tradeapi.REST(
     key_id=api_key_id,
     secret_key=api_secret
 )
+
+#get the 'n' smallest data points in an array
+def getLocalMins(data,n):
+
+    l = len(data)
+    window = l / n
+    mins = []
+
+    i = 0
+    for d in data:
+
+        index = math.floor(i / window)
+        print(index)
+
+        if len(mins) < index + 1:
+            mins.append(d)
+        else:
+            if d < mins[index]:
+                mins[index] = d
+        i += 1
+
+    return mins
 
 #calculate simple moving average
 def movingaverage(values,window):
@@ -45,9 +70,12 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
 
 session = requests.session()
 
+#actual stuff here
+#================================================#
+
 #retrieve price data
-bars = api.get_barset('AAPL', '5Min', limit=672)
-aapl_bars = bars['AAPL']
+bars = api.get_barset('NVDA', '5Min', limit=672)
+aapl_bars = bars['NVDA']
 
 o = [] #open price data
 
@@ -67,21 +95,22 @@ flattened = o - trend #normalize stock price to trendline
 flattened /= z[1] #get stock price as a percentage
 flattened *= 100
 
-# Sample rate and desired cutoff frequencies (in Hz).
+print(getLocalMins(flattened,5))
+
 #center frequency 0.00001388 Hz (20-hr period)
 # or 0.004164 since we multiply by 300
-fs = 2.0
-lowcut = 0.003123
-highcut = 0.005205
-
-#filtered = butter_bandpass_filter(x, lowcut, highcut, fs, order=6)
+# Sample rate and desired cutoff frequencies (in Hz).
+fs = 1000.0
+lowcut = 1.0
+highcut = 499.0 # must be less than 0.5fs
+filtered = butter_bandpass_filter(x, lowcut, highcut, fs, order=6) / 5
 
 variance = np.var(flattened) #calculate variance
 print(variance)
 
 fig, ax = mpl.subplots()
-mpl.plot(x,flattened)
-#mpl.plot(x,filtered)
+mpl.plot(flattened)
+mpl.plot(filtered)
 #mpl.plot(x,o)
 #mpl.plot(x, trend, '-')
 # mpl.plot(sma)
