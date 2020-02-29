@@ -41,6 +41,38 @@ def findZeros(signal):
 
     return zeros
 
+#returns the x location of the max values
+def findMaxs(signal,filtered,zeros):
+    maxs = []
+
+    for zero in zeros: #loop through all zeros
+        index = zeros.index(zero)
+        if filtered[zero + 1] - filtered[zero] > 0: #identify a positive slope
+            if zeros.index(zero) < len(zeros) - 1:
+                nextZero = zeros[index + 1]
+                section = signal[zero:nextZero]
+            else:
+                section = signal[zero:len(signal) - 1]
+            maxs.append( np.where(signal == max(section))[0][0] )
+
+    return maxs
+
+#returns the x location of the max values
+def findMins(signal,filtered,zeros):
+    mins = []
+
+    for zero in zeros: #loop through all zeros
+        index = zeros.index(zero)
+        if filtered[zero + 1] - filtered[zero] < 0: #identify a positive slope
+            if zeros.index(zero) < len(zeros) - 1:
+                nextZero = zeros[index + 1]
+                section = signal[zero:nextZero]
+            else:
+                section = signal[zero:len(signal) - 1]
+            mins.append( np.where(signal == min(section))[0][0] )
+
+    return mins
+
 
 #calculate simple moving average
 def movingaverage(values,window):
@@ -67,7 +99,7 @@ session = requests.session()
 #actual stuff here
 #================================================#
 
-symbol = 'CHK'
+symbol = 'AAPL'
 
 #retrieve price data
 bars = api.get_barset(symbol, '5Min', limit=1000)
@@ -79,8 +111,6 @@ i = 0
 for bar in aapl_bars: #get all opening price data
     i += 1
     o.append(bar.o)
-
-sma = movingaverage(o,48)
 
 x = np.linspace(0,i,i) #time axis values
 #x *= 300 #300s converts 5min to hz
@@ -102,17 +132,55 @@ lowcut = 0.00001041 * (1 - corner)
 highcut = 0.00001735 * (1 + corner)
 filtered = butter_bandpass_filter(flattened, lowcut, highcut, fs, order=3)
 
+sma = movingaverage(flattened,100)
+
 variance = np.var(flattened) #calculate variance
+zeros = findZeros(filtered)
+maxes = findMaxs(flattened,filtered,zeros)
+mins = findMins(flattened,filtered,zeros)
+
+maxValues = []
+for max in maxes:
+    maxValues.append(o[max])
+
+minValues = []
+for min in mins:
+    minValues.append(o[min])
+
+z = np.polyfit(maxes, maxValues, 1)  # returns slope and intercept
+resistance = np.linspace(z[1], z[1] + i * z[0], i)  # creates array for line
+
+z = np.polyfit(mins, minValues, 1)  # returns slope and intercept
+support = np.linspace(z[1], z[1] + i * z[0], i)  # creates array for line
 
 print(f"Variance is: {variance}")
-print(f"Zeros are: {findZeros(filtered)}")
+print(f"Zeros are: {zeros}")
+print(f"Peaks are at: {maxes}")
+print(maxValues)
+print(f"Valleys are at: {mins}")
+print(minValues)
 
+fig, ax = mpl.subplots(1,2)
 
-fig, ax = mpl.subplots()
-mpl.plot(flattened)
-mpl.plot(filtered)
+#FILTERED AND NORMALIZED PRICE DATA
+ax[0].plot(flattened)
+ax[0].plot(filtered)
+#ax[0].plot(sma)
+ax[0].set_title(f'Normalized Price Data {symbol}')
+ax[0].set_xlabel('Time (5mins)')
+ax[0].set_ylabel('% change relative to opening price')
+
+#REAL PRICE DATA AND TRENDLINES
+ax[1].plot(x,o)
+ax[1].plot(maxes,maxValues,'go')
+ax[1].plot(mins,minValues,'ro')
+ax[1].plot(resistance,color = 'green')
+ax[1].plot(support,color = 'red')
+ax[1].set_title(f'Price Data {symbol}')
+ax[1].set_xlabel('Time (5mins)')
+ax[1].set_ylabel('Price (USD)')
+
+#
 #mpl.plot(filtered_variance)
-#mpl.plot(x,o)
 #mpl.plot(x, trend, '-')
-# mpl.plot(sma)
 mpl.show()
