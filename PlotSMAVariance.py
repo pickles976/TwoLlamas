@@ -99,7 +99,7 @@ session = requests.session()
 #actual stuff here
 #================================================#
 
-symbol = 'AAPL'
+symbol = 'NVDA'
 
 #retrieve price data
 bars = api.get_barset(symbol, '5Min', limit=1000)
@@ -180,7 +180,21 @@ ax[1].set_title(f'Price Data {symbol}')
 ax[1].set_xlabel('Time (5mins)')
 ax[1].set_ylabel('Price (USD)')
 
-#
-#mpl.plot(filtered_variance)
-#mpl.plot(x, trend, '-')
+#flips the x so we can do linera regression and get the r2 value
+maxes = np.array(maxes).reshape((-1,1))
+#mkaing our linear model for the maxes
+modelMax = LinearRegression().fit(maxes,maxValues)
+#getting the r2 value for the max to see the fit
+rSQMax = modelMax.score(maxes,maxValues) ** 2
+#outputting the vlaue
+print(f"Resistance R2 is: {rSQMax}")
+#;ip the x of the mins
+mins = np.array(mins).reshape((-1,1))
+#calulcate the linear model for the mins
+modelMin = LinearRegression().fit(mins,minValues)
+#get the r2 value for the mins
+rSQMin = modelMin.score(mins,minValues) ** 2
+#prting the support line value
+print(f"Support R2 is: {rSQMin}")
+
 mpl.show()
