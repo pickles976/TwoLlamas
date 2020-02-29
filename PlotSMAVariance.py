@@ -26,27 +26,14 @@ api = tradeapi.REST(
     secret_key=api_secret
 )
 
-#get the 'n' smallest data points in an array
-def getLocalMins(data,n):
+#get the energy of a signal
+def getSignalEnergy(signal):
+    e = 0;
+    for xn in signal:
+        e += xn ** 2
+    e /= len(signal)
+    return e
 
-    l = len(data)
-    window = l / n
-    mins = []
-
-    i = 0
-    for d in data:
-
-        index = math.floor(i / window)
-        print(index)
-
-        if len(mins) < index + 1:
-            mins.append(d)
-        else:
-            if d < mins[index]:
-                mins[index] = d
-        i += 1
-
-    return mins
 
 #calculate simple moving average
 def movingaverage(values,window):
@@ -55,7 +42,7 @@ def movingaverage(values,window):
     return smas
 
 #generate bandpass filter
-def butter_bandpass(lowcut, highcut, fs, order=5):
+def butter_bandpass(lowcut, highcut, fs, order):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
@@ -73,9 +60,11 @@ session = requests.session()
 #actual stuff here
 #================================================#
 
+symbol = 'NVDA'
+
 #retrieve price data
-bars = api.get_barset('NVDA', '5Min', limit=672)
-aapl_bars = bars['NVDA']
+bars = api.get_barset(symbol, '5Min', limit=672)
+aapl_bars = bars[symbol]
 
 o = [] #open price data
 
@@ -95,18 +84,20 @@ flattened = o - trend #normalize stock price to trendline
 flattened /= z[1] #get stock price as a percentage
 flattened *= 100
 
-print(getLocalMins(flattened,5))
-
 #center frequency 0.00001388 Hz (20-hr period)
 # or 0.004164 since we multiply by 300
 # Sample rate and desired cutoff frequencies (in Hz).
-fs = 1000.0
-lowcut = 1.0
-highcut = 499.0 # must be less than 0.5fs
-filtered = butter_bandpass_filter(x, lowcut, highcut, fs, order=6) / 5
+fs = 0.003333
+corner = 0.75 #expand the sidelobe by this percentage
+#lowcut = 0.003123
+lowcut = 0.00001041 * (1 - corner)
+#highcut = 0.005205
+highcut = 0.00001735 * (1 + corner)
+filtered = butter_bandpass_filter(flattened, lowcut, highcut, fs, order=3)
 
 variance = np.var(flattened) #calculate variance
-print(variance)
+print(f"Variance is: {variance}")
+print(f"Energy is: {getSignalEnergy(filtered)}")
 
 fig, ax = mpl.subplots()
 mpl.plot(flattened)
