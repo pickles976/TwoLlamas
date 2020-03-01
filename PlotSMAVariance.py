@@ -87,16 +87,19 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
 def getTrendLines(symbol):
 
     #retrieve price data
-    bars = api.get_barset(symbol, '5Min', limit=1000)
+    allbars = api.get_barset(symbol, '5Min', limit=1000)
     multOf5 = 1
-    aapl_bars = bars[symbol]
-    #aapl_bars = aapl_bars[0:700]
+    bars = allbars[symbol]
+    barsPast = bars[0:700]
+    barsFuture = bars[701:999]
     window = (60 / (5 * multOf5)) * (7)
 
     o = [] #open price data
+    oPast = []
+    oFuture = []
 
     i = 0
-    for bar in aapl_bars: #get all opening price data
+    for bar in barsPast: #get all opening price data
         i += 1
         o.append(bar.o)
 
@@ -203,12 +206,55 @@ def getTrendLines(symbol):
     print(f"Support R2 is: {rSQMin}")
 
     #throw our low correlation
-    if rSQMax < 0.6 or rSQMin < 0.6:
+    if rSQMax < 0.0 or rSQMin < 0.0:
         return []
 
     #return the slope and intercepts of our trendline
     return [ rz[0],rz[1],sz[0],sz[1] ]
 
+symbol = 'NVDA'
 
-getTrendLines('AAPL')
+l = getTrendLines(symbol)
+
+# retrieve price data
+allbars = api.get_barset(symbol, '5Min', limit=1000)
+bars = allbars[symbol]
+o = []  # open price data
+
+i = 0
+for bar in bars:  # get all opening price data
+    i += 1
+    o.append(bar.o)
+
+x = np.linspace(0, i, i)  # time axis values
+
+sellTolerance = 0.1
+buyTolerance = 0.1
+stopTolerance = 0.1
+
+channelWidth = l[1] - l[3]
+
+rl = np.linspace(l[1], l[1] + i * l[0], i)  # creates array for line
+sl = np.linspace(l[3], l[3] + i * l[2], i)  # creates array for line
+
+buyPoint = l[3] + (sellTolerance * channelWidth)
+sellPoint = l[1] - (buyTolerance * channelWidth)
+stopPoint = l[3] - (stopTolerance * channelWidth)
+
+buyLine = np.linspace(buyPoint, buyPoint + i * l[2], i)  # creates array for line
+sellLine = np.linspace(sellPoint, sellPoint + i * l[0], i)  # creates array for line
+stopLine = np.linspace(stopPoint , stopPoint + i * l[2], i)  # creates array for line
+
+# REAL PRICE DATA AND TRENDLINES
+fig, ax = mpl.subplots()
+ax.plot(x, o)
+ax.plot(rl, color='green')
+ax.plot(sl, color='red')
+ax.plot(buyLine, color='blue')
+ax.plot(sellLine, color='yellow')
+ax.plot(stopLine,color = 'black')
+ax.set_title(f'Price Data {symbol}')
+ax.set_xlabel('Time (5mins)')
+ax.set_ylabel('Price (USD)')
+
 mpl.show()
