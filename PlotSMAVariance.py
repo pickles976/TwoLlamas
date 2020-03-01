@@ -212,7 +212,7 @@ def getTrendLines(symbol):
     #return the slope and intercepts of our trendline
     return [ rz[0],rz[1],sz[0],sz[1] ]
 
-symbol = 'NVDA'
+symbol = 'AAPL'
 
 l = getTrendLines(symbol)
 
@@ -247,12 +247,12 @@ stopLine = np.linspace(stopPoint , stopPoint + i * l[2], i)  # creates array for
 
 # REAL PRICE DATA AND TRENDLINES
 fig, ax = mpl.subplots()
-ax.plot(x, o)
-ax.plot(rl, color='green')
-ax.plot(sl, color='red')
-ax.plot(buyLine, color='blue')
-ax.plot(sellLine, color='yellow')
-ax.plot(stopLine,color = 'black')
+ax.plot(x[751:999], o[751:999])
+ax.plot(x[751:999],rl[751:999], color='green')
+ax.plot(x[751:999],sl[751:999], color='red')
+ax.plot(x[751:999],buyLine[751:999], color='blue')
+ax.plot(x[751:999],sellLine[751:999], color='yellow')
+ax.plot(x[751:999],stopLine[751:999],color = 'black')
 ax.set_title(f'Price Data {symbol}')
 ax.set_xlabel('Time (5mins)')
 ax.set_ylabel('Price (USD)')
