@@ -1,19 +1,12 @@
-import sys
-
 import alpaca_trade_api as tradeapi
 import requests
 import matplotlib.pyplot as mpl
 from scipy.signal import butter, lfilter
-import math
-import mpl_finance as plt
-import time
-from ta import trend
-import pandas as pd
-#import ta
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from datetime import datetime, timedelta
-from pytz import timezone
+
+vThresh = 0
+plotting = True
 
 # Replace these with your API connection info from the dashboard
 base_url = 'https://paper-api.alpaca.markets'
@@ -26,8 +19,10 @@ api = tradeapi.REST(
     secret_key=api_secret
 )
 
+session = requests.session()
+
 #find the zeros of a signal
-def findZeros(signal):
+def findZeros(signal,window):
     zeros = []
     zeros.append(0)
     for n in signal:
@@ -36,7 +31,7 @@ def findZeros(signal):
         if index > 0 and index < len(signal) - 1:
             #check if we have gone from negative to positive
             if (signal[index - 1] < 0 and signal[index + 1] > 0) or (signal[index - 1] > 0 and signal[index + 1] < 0):
-                if abs(zeros[len(zeros) - 1] - index) > 20:
+                if abs(zeros[len(zeros) - 1] - index) > window:
                     zeros.append(index) #add the index of n to our list of zeros
 
     return zeros
@@ -73,13 +68,6 @@ def findMins(signal,filtered,zeros):
 
     return mins
 
-
-#calculate simple moving average
-def movingaverage(values,window):
-    weights = np.repeat(1.0,window)/window
-    smas = np.convolve(values,weights,'valid')
-    return smas
-
 #generate bandpass filter
 def butter_bandpass(lowcut, highcut, fs, order):
     nyq = 0.5 * fs
@@ -94,107 +82,133 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     y = lfilter(b, a, data)
     return y
 
-session = requests.session()
+#returns the support and resistance lines for a
+#stock with good potential for swing trading
+def getTrendLines(symbol):
 
-#actual stuff here
-#================================================#
+    #retrieve price data
+    bars = api.get_barset(symbol, '5Min', limit=1000)
+    multOf5 = 1
+    aapl_bars = bars[symbol]
+    #aapl_bars = aapl_bars[0:700]
+    window = (60 / (5 * multOf5)) * (7)
 
-symbol = 'NVDA'
+    o = [] #open price data
 
-#retrieve price data
-bars = api.get_barset(symbol, '5Min', limit=1000)
-aapl_bars = bars[symbol]
+    i = 0
+    for bar in aapl_bars: #get all opening price data
+        i += 1
+        o.append(bar.o)
 
-o = [] #open price data
+    x = np.linspace(0,i,i) #time axis values
+    z = np.polyfit(x, o, 1) #returns slope and intercept
 
-i = 0
-for bar in aapl_bars: #get all opening price data
-    i += 1
-    o.append(bar.o)
+    #if slope is negative throw it out
+    # if z[0] < 0:
+    #     return []
 
-x = np.linspace(0,i,i) #time axis values
-#x *= 300 #300s converts 5min to hz
-z = np.polyfit(x, o, 1) #returns slope and intercept
-trend = np.linspace(z[1],z[1] + i * z[0],i) #creates array for line
+    trend = np.linspace(z[1],z[1] + i * z[0],i) #creates array for line
 
-flattened = o - trend #normalize stock price to trendline
-flattened /= z[1] #get stock price as a percentage
-flattened *= 100
+    flattened = o - trend #normalize stock price to trendline
+    flattened /= z[1] #get stock price as a percentage
+    flattened *= 100
 
-#center frequency 0.00001388 Hz (20-hr period)
-# or 0.004164 since we multiply by 300
-# Sample rate and desired cutoff frequencies (in Hz).
-fs = 0.003333
-corner = 0.75 #expand the sidelobe by this percentage
-#lowcut = 0.003123
-lowcut = 0.00001041 * (1 - corner)
-#highcut = 0.005205
-highcut = 0.00001735 * (1 + corner)
-filtered = butter_bandpass_filter(flattened, lowcut, highcut, fs, order=3)
+    #center frequency 0.00001388 Hz (20-hr period)
+    # or 0.004164 since we multiply by 300
+    # Sample rate and desired cutoff frequencies (in Hz).
+    fs = 0.00333 / multOf5
+    corner = 0.0 #expand the sidelobe by this percentage
+    #lowcut = 0.003123
+    lowcut = 0.00001041 * (1 - corner) / multOf5
+    #highcut = 0.005205
+    highcut = 0.00001735 * (1 + corner) / multOf5
+    filtered = butter_bandpass_filter(flattened, lowcut, highcut, fs, order=3)
 
-sma = movingaverage(flattened,100)
+    variance = np.var(flattened) #calculate variance
 
-variance = np.var(flattened) #calculate variance
-zeros = findZeros(filtered)
-maxes = findMaxs(flattened,filtered,zeros)
-mins = findMins(flattened,filtered,zeros)
+    #throw out if variance is too low
+    if variance < vThresh:
+        return []
 
-maxValues = []
-for max in maxes:
-    maxValues.append(o[max])
+    zeros = findZeros(filtered,window)
+    maxes = findMaxs(flattened,filtered,zeros)
+    mins = findMins(flattened,filtered,zeros)
 
-minValues = []
-for min in mins:
-    minValues.append(o[min])
+    # if len(maxes) < 3 or len(mins) < 3:
+    #     return []
 
-z = np.polyfit(maxes, maxValues, 1)  # returns slope and intercept
-resistance = np.linspace(z[1], z[1] + i * z[0], i)  # creates array for line
+    maxValues = []
+    for max in maxes:
+        maxValues.append(o[max])
 
-z = np.polyfit(mins, minValues, 1)  # returns slope and intercept
-support = np.linspace(z[1], z[1] + i * z[0], i)  # creates array for line
+    minValues = []
+    for min in mins:
+        minValues.append(o[min])
 
-print(f"Variance is: {variance}")
-print(f"Zeros are: {zeros}")
-print(f"Peaks are at: {maxes}")
-print(maxValues)
-print(f"Valleys are at: {mins}")
-print(minValues)
+    rz = np.polyfit(maxes, maxValues, 1)  # returns slope and intercept
+    resistance = np.linspace(rz[1], rz[1] + i * rz[0], i)  # creates array for line
 
-fig, ax = mpl.subplots(1,2)
+    sz = np.polyfit(mins, minValues, 1)  # returns slope and intercept
+    support = np.linspace(sz[1], sz[1] + i * sz[0], i)  # creates array for line
 
-#FILTERED AND NORMALIZED PRICE DATA
-ax[0].plot(flattened)
-ax[0].plot(filtered)
-#ax[0].plot(sma)
-ax[0].set_title(f'Normalized Price Data {symbol}')
-ax[0].set_xlabel('Time (5mins)')
-ax[0].set_ylabel('% change relative to opening price')
+    # #throw out negative trendlines
+    # if rz[0] < 0 or sz[0] < 0:
+    #     return []
+    #
+    # #throw out if trendlines slopes intersect
+    # if rz[0] < sz[0]:
+    #     return []
+    #
+    # #throw out if trendline slope is too steep or too shallow
+    # if rz[0] > 1 or rz[0] < 0.5 or sz[0] > 1 or sz[0] < 0.5:
+    #     return []
 
-#REAL PRICE DATA AND TRENDLINES
-ax[1].plot(x,o)
-ax[1].plot(maxes,maxValues,'go')
-ax[1].plot(mins,minValues,'ro')
-ax[1].plot(resistance,color = 'green')
-ax[1].plot(support,color = 'red')
-ax[1].set_title(f'Price Data {symbol}')
-ax[1].set_xlabel('Time (5mins)')
-ax[1].set_ylabel('Price (USD)')
+    print(f"Variance is: {variance}")
+    print(f"Zeros are: {zeros}")
+    print(f"Peaks are at: {maxes}")
+    print(maxValues)
+    print(f"Valleys are at: {mins}")
+    print(minValues)
 
-#flips the x so we can do linera regression and get the r2 value
-maxes = np.array(maxes).reshape((-1,1))
-#mkaing our linear model for the maxes
-modelMax = LinearRegression().fit(maxes,maxValues)
-#getting the r2 value for the max to see the fit
-rSQMax = modelMax.score(maxes,maxValues) ** 2
-#outputting the vlaue
-print(f"Resistance R2 is: {rSQMax}")
-#;ip the x of the mins
-mins = np.array(mins).reshape((-1,1))
-#calulcate the linear model for the mins
-modelMin = LinearRegression().fit(mins,minValues)
-#get the r2 value for the mins
-rSQMin = modelMin.score(mins,minValues) ** 2
-#prting the support line value
-print(f"Support R2 is: {rSQMin}")
+    if plotting:
 
+        fig, ax = mpl.subplots(1,2)
+
+        #FILTERED AND NORMALIZED PRICE DATA
+        ax[0].plot(flattened)
+        ax[0].plot(filtered)
+        ax[0].set_title(f'Normalized Price Data {symbol}')
+        ax[0].set_xlabel('Time (5mins)')
+        ax[0].set_ylabel('% change relative to opening price')
+
+        #REAL PRICE DATA AND TRENDLINES
+        ax[1].plot(x,o)
+        ax[1].plot(maxes,maxValues,'go')
+        ax[1].plot(mins,minValues,'ro')
+        ax[1].plot(resistance,color = 'green')
+        ax[1].plot(support,color = 'red')
+        ax[1].set_title(f'Price Data {symbol}')
+        ax[1].set_xlabel('Time (5mins)')
+        ax[1].set_ylabel('Price (USD)')
+
+    #flips the x so we can do linear regression and get the r2 value
+    maxes = np.array(maxes).reshape((-1,1))
+    modelMax = LinearRegression().fit(maxes,maxValues)
+    rSQMax = modelMax.score(maxes,maxValues) ** 2
+    print(f"Resistance R2 is: {rSQMax}")
+
+    mins = np.array(mins).reshape((-1,1))
+    modelMin = LinearRegression().fit(mins,minValues)
+    rSQMin = modelMin.score(mins,minValues) ** 2
+    print(f"Support R2 is: {rSQMin}")
+
+    #throw our low correlation
+    if rSQMax < 0.6 or rSQMin < 0.6:
+        return []
+
+    #return the slope and intercepts of our trendline
+    return [ rz[0],rz[1],sz[0],sz[1] ]
+
+
+getTrendLines('AAPL')
 mpl.show()
