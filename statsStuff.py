@@ -5,7 +5,7 @@ from scipy.signal import butter, lfilter
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-vThresh = 0
+vThresh = 25
 plotting = True
 
 # Replace these with your API connection info from the dashboard
@@ -90,13 +90,10 @@ def getTrendLines(symbol):
     allbars = api.get_barset(symbol, '5Min', limit=1000)
     multOf5 = 1
     bars = allbars[symbol]
-    barsPast = bars[0:700]
-    barsFuture = bars[701:999]
+    barsPast = bars[0:750]
     window = (60 / (5 * multOf5)) * (7)
 
     o = [] #open price data
-    oPast = []
-    oFuture = []
 
     i = 0
     for bar in barsPast: #get all opening price data
@@ -104,11 +101,15 @@ def getTrendLines(symbol):
         o.append(bar.o)
 
     x = np.linspace(0,i,i) #time axis values
+
+    if len(x) != 750:
+        return []
+
     z = np.polyfit(x, o, 1) #returns slope and intercept
 
     #if slope is negative throw it out
-    # if z[0] < 0:
-    #     return []
+    if z[0] < 0:
+        return []
 
     trend = np.linspace(z[1],z[1] + i * z[0],i) #creates array for line
 
@@ -137,8 +138,8 @@ def getTrendLines(symbol):
     maxes = findMaxs(flattened,filtered,zeros)
     mins = findMins(flattened,filtered,zeros)
 
-    # if len(maxes) < 3 or len(mins) < 3:
-    #     return []
+    if len(maxes) < 3 and len(mins) < 3:
+        return []
 
     maxValues = []
     for max in maxes:
@@ -154,24 +155,42 @@ def getTrendLines(symbol):
     sz = np.polyfit(mins, minValues, 1)  # returns slope and intercept
     support = np.linspace(sz[1], sz[1] + i * sz[0], i)  # creates array for line
 
-    # #throw out negative trendlines
-    # if rz[0] < 0 or sz[0] < 0:
-    #     return []
-    #
-    # #throw out if trendlines slopes intersect
-    # if rz[0] < sz[0]:
-    #     return []
-    #
-    # #throw out if trendline slope is too steep or too shallow
-    # if rz[0] > 1 or rz[0] < 0.5 or sz[0] > 1 or sz[0] < 0.5:
+    #throw out negative trendlines
+    if rz[0] < 0 or sz[0] < 0:
+        return []
+
+    #throw out if trendlines slopes intersect
+    if rz[0] < sz[0]:
+        return []
+
+    # # #throw out if trendline slope is too steep or too shallow
+    # if rz[0] > 0.001 or sz[0] > 0.001:
     #     return []
 
+    print(symbol)
     print(f"Variance is: {variance}")
     print(f"Zeros are: {zeros}")
     print(f"Peaks are at: {maxes}")
     print(maxValues)
     print(f"Valleys are at: {mins}")
     print(minValues)
+    print(f"Resistance slope: {rz[0]}")
+    print(f"Support slope: {sz[0]}")
+
+    #flips the x so we can do linear regression and get the r2 value
+    maxes = np.array(maxes).reshape((-1,1))
+    modelMax = LinearRegression().fit(maxes,maxValues)
+    rSQMax = modelMax.score(maxes,maxValues) ** 2
+    print(f"Resistance R2 is: {rSQMax}")
+
+    mins = np.array(mins).reshape((-1,1))
+    modelMin = LinearRegression().fit(mins,minValues)
+    rSQMin = modelMin.score(mins,minValues) ** 2
+    print(f"Support R2 is: {rSQMin}")
+
+    #throw our low correlation
+    if rSQMax < 0.6 or rSQMin < 0.6:
+        return []
 
     if plotting:
 
@@ -194,67 +213,5 @@ def getTrendLines(symbol):
         ax[1].set_xlabel('Time (5mins)')
         ax[1].set_ylabel('Price (USD)')
 
-    #flips the x so we can do linear regression and get the r2 value
-    maxes = np.array(maxes).reshape((-1,1))
-    modelMax = LinearRegression().fit(maxes,maxValues)
-    rSQMax = modelMax.score(maxes,maxValues) ** 2
-    print(f"Resistance R2 is: {rSQMax}")
-
-    mins = np.array(mins).reshape((-1,1))
-    modelMin = LinearRegression().fit(mins,minValues)
-    rSQMin = modelMin.score(mins,minValues) ** 2
-    print(f"Support R2 is: {rSQMin}")
-
-    #throw our low correlation
-    if rSQMax < 0.0 or rSQMin < 0.0:
-        return []
-
     #return the slope and intercepts of our trendline
     return [ rz[0],rz[1],sz[0],sz[1] ]
-
-symbol = 'AAPL'
-
-l = getTrendLines(symbol)
-
-# retrieve price data
-allbars = api.get_barset(symbol, '5Min', limit=1000)
-bars = allbars[symbol]
-o = []  # open price data
-
-i = 0
-for bar in bars:  # get all opening price data
-    i += 1
-    o.append(bar.o)
-
-x = np.linspace(0, i, i)  # time axis values
-
-sellTolerance = 0.1
-buyTolerance = 0.1
-stopTolerance = 0.1
-
-channelWidth = l[1] - l[3]
-
-rl = np.linspace(l[1], l[1] + i * l[0], i)  # creates array for line
-sl = np.linspace(l[3], l[3] + i * l[2], i)  # creates array for line
-
-buyPoint = l[3] + (sellTolerance * channelWidth)
-sellPoint = l[1] - (buyTolerance * channelWidth)
-stopPoint = l[3] - (stopTolerance * channelWidth)
-
-buyLine = np.linspace(buyPoint, buyPoint + i * l[2], i)  # creates array for line
-sellLine = np.linspace(sellPoint, sellPoint + i * l[0], i)  # creates array for line
-stopLine = np.linspace(stopPoint , stopPoint + i * l[2], i)  # creates array for line
-
-# REAL PRICE DATA AND TRENDLINES
-fig, ax = mpl.subplots()
-ax.plot(x[751:999], o[751:999])
-ax.plot(x[751:999],rl[751:999], color='green')
-ax.plot(x[751:999],sl[751:999], color='red')
-ax.plot(x[751:999],buyLine[751:999], color='blue')
-ax.plot(x[751:999],sellLine[751:999], color='yellow')
-ax.plot(x[751:999],stopLine[751:999],color = 'black')
-ax.set_title(f'Price Data {symbol}')
-ax.set_xlabel('Time (5mins)')
-ax.set_ylabel('Price (USD)')
-
-mpl.show()
