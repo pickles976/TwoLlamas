@@ -17,7 +17,7 @@ api = tradeapi.REST(
 
 # We only consider stocks with per-share prices inside this range
 min_share_price = 10.0
-max_share_price = 100.0
+max_share_price = 500.0
 # Minimum previous-day dollar volume for a stock we might consider
 min_last_dv = 5000000
 
@@ -65,7 +65,7 @@ for ticker in tickers:
         buyTolerance = 0.1
         stopTolerance = 0.1
 
-        channelWidth = l[1] - l[3]
+        channelWidth = (l[1] + 750 * l[0]) - (l[3] + 750 * l[2])
 
         rl = np.linspace(l[1], l[1] + i * l[0], i)  # creates array for line
         sl = np.linspace(l[3], l[3] + i * l[2], i)  # creates array for line
@@ -101,6 +101,7 @@ for ticker in tickers:
         ax.set_xlabel('Time (5mins)')
         ax.set_ylabel('Price (USD)')
 
-        mpl.show()
 
-        break
+
+mpl.show()
+

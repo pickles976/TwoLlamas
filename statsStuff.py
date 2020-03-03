@@ -138,7 +138,7 @@ def getTrendLines(symbol):
     maxes = findMaxs(flattened,filtered,zeros)
     mins = findMins(flattened,filtered,zeros)
 
-    if len(maxes) < 3 and len(mins) < 3:
+    if len(maxes) < 3 or len(mins) < 3:
         return []
 
     maxValues = []
@@ -212,6 +212,9 @@ def getTrendLines(symbol):
         ax[1].set_title(f'Price Data {symbol}')
         ax[1].set_xlabel('Time (5mins)')
         ax[1].set_ylabel('Price (USD)')
+
+        # print(f"Resistance slope angle normalized: {rz[0] * 750 / (top - bottom) }")
+        # print(f"Support slope normalized: {sz[0] * 750 / (top - bottom)}")
 
     #return the slope and intercepts of our trendline
     return [ rz[0],rz[1],sz[0],sz[1] ]
