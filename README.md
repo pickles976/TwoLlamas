@@ -12,7 +12,7 @@ From there you can implement trading however you see fit.
 1. Look through all available tickers and filters by volume, min price, and max price.
 2. For each stock that matches our criteria, pull 1000 samples of 5-minute candlestick data. Perform analysis on the first 750 samples.
 2. Use basic linear regression to find stocks with a positive trend and high variance.
-3. Apply a bandpass filter to the price data. BPF has a center frequency of 1/20hrs (half a cycle is 10 hours of open market)
+3. Normalize price data to linear trend and apply Band-Pass filter. BPF has a center frequency of 1/20hrs (half a cycle is 10 hours of open market)
 4. Use filtered signal to predict high and low sections of the price data, extract local max and min values for high and low sections
 5. Plot simple linear regression on the peaks and valleys to build support and resistance lines. Throw out stocks with low r^2 values.
 6. Throw out stocks with negative trendlines, converging trendlines, or too few sample points.
